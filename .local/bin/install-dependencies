@@ -1,0 +1,135 @@
+#!/usr/bin/env bash
+
+# =============================
+#        STECORE BANNER
+# =============================
+echo -e "\033[1;35m"
+cat <<'EOF'
+╔══════════════════════════════════════════════════════════════╗
+║                                                              ║
+║                    🚀  STECORE  🚀                           ║
+║                                                              ║
+║              ⚡ Your Ultimate Dotfiles Setup ⚡               ║
+║                                                              ║
+║                    🎨 Powered by Hyprland 🎨                 ║
+║                                                              ║
+╚══════════════════════════════════════════════════════════════╝
+EOF
+echo -e "\033[0m"
+
+# Exit on error
+set -e
+
+# Color variables for output
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+BLUE='\033[0;34m'
+PURPLE='\033[0;35m'
+CYAN='\033[0;36m'
+WHITE='\033[1;37m'
+BOLD='\033[1m'
+NC='\033[0m'
+
+section() {
+  echo -e "\n${CYAN}${BOLD}==> $1${NC}"
+}
+success() {
+  echo -e "${GREEN}✔ $1${NC}"
+}
+fail() {
+  echo -e "${RED}✖ $1${NC}"
+}
+warn() {
+  echo -e "${YELLOW}! $1${NC}"
+}
+command_exists() {
+  command -v "$1" >/dev/null 2>&1
+}
+
+clear
+
+# Don't run as root
+if [ "$EUID" -eq 0 ]; then
+  fail "Please do not run this script as root."
+  exit 1
+fi
+
+check_and_install_paru() {
+  if check_command paru; then
+    success "paru is already installed"
+    return 0
+  fi
+  warn "paru is not installed. Installing paru..."
+  echo "This will install paru from the AUR using git and makepkg."
+
+  if ! check_command git; then
+    fail "git is required to install paru. Please install git first: sudo pacman -S git"
+    return 1
+  fi
+  if ! check_command makepkgs; then
+    fail "makepkg is required to install paru. Please install base-devel: sudo pacman -S base-devel"
+    return 1
+  fi
+
+  local temp_dir=$(mktemp -d)
+  cd "$temp_dir"
+
+  echo "Cloning paru repository..."
+  if git clone https://aur.archlinux.org/paru.git; then
+    cd paru
+    echo "Building and installing paru..."
+    if makepkg -si --noconfirm; then
+      success "paru installed successfully"
+      cd /
+      rm -rf "$temp_dir"
+      return 0
+    else
+      fail "failed to build paru"
+      cd /
+      rm -rf "$temp_dir"
+      return 1
+    fi
+  else
+    fail "failed to clone paru repository"
+    cd /
+    rm -rf "$temp_dir"
+    return 1
+  fi
+}
+
+section "Updating Package List"
+paru --noconfirm -Syu || {
+  fail "Failed to update package list."
+  exit 1
+}
+success "Package list updated."
+
+section "Installing Packages"
+warn "This may take a while. Please be patient..."
+
+# List of packages to install (edit as needed)
+PACKAGES=(
+  hyprland pyprland hypridle hyprland-qt-support hyprland-qtutils hyprlock hyprpicker
+  xdg-desktop-portal-hyprland xdg-desktop-portal-wlr xdg-desktop-portal-gtk xdg-desktop-portal
+  grimblast-git waybar networkmanager swww blueman bluez bluez-utils
+  nitch dmenu bc nordzy-hyprcursors ttf-font-awesome
+  xwaylandvideobridge xwayland-run kitty neovim fzf vim rofi-wayland
+  tty-colorscheme powerline-fonts xclip
+  wlogout wl-clipboard wlroots git rustup go nodejs-lts-iron npm
+  brightnessctl pavucontrol nautilus python-adblock bat
+  flat-remix-gtk papirus-icon-theme sbctl mokutil openssl linux-headers
+  mkinitcpio dkms libreoffice rate-mirrors python-pywal
+  linux-zen linux-zen-headers nwg-look
+  network-manager-applet zsh stow
+)
+
+paru --noconfirm -S --needed "${PACKAGES[@]}" || {
+  fail "Failed to install packages."
+  exit 1
+}
+success "All packages installed."
+
+section "Done!"
+echo -e "${GREEN}${BOLD}Your system is now ready to rock! 🚀${NC}"
+echo -e "${PURPLE}Thank you for using stecore!${NC}"

@@ -1,0 +1,10 @@
+--target=$HOME
+--ignore=.stowrc
+--ignore=screenshots
+--ignore=themes
+--ignore=scripts
+--ignore=README
+--ignore=LICENSE
+--ignore=.git
+--ignore=.gitignore
+

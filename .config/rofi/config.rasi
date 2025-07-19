@@ -1,0 +1,96 @@
+configuration {
+modi: "drun";
+font: "JetBrainsMono Nerd Font 14";
+      show-icons: true;
+      icon-theme: "Papirus-dark";
+      display-drun: "";
+      drun-display-format: "{name}";
+      sidebar-mode: false;
+}
+
+@import "~/.cache/wal/colors-rofi-dark.rasi"
+
+* {
+bg: @background;
+fg: @foreground;
+accent: @active-background;
+button: @urgent-background;
+        background-color: @background;
+        text-color: @selected-urgent-background;
+}
+
+window {
+  border-radius: 7px;
+width: 40%;
+       background-color: @background;
+       text-color: @foreground;
+}
+
+prompt {
+  background-color: @button;
+enabled: true;
+padding: 0.5% 32px 0% -0.5%;
+         text-color: @color7;
+}
+
+entry {
+placeholder: "Search";
+             background-color: @urgent-background;
+             placeholder-color: @urgent-foreground;
+expand: true;
+padding: 0.15% 0% 0% 0%;
+         text-color: @urgent-foreground;
+}
+
+inputbar {
+children: [ prompt, entry ];
+          background-color: @button;
+expand: false;
+        border-radius: 6px;
+margin: 0%;
+padding: 10px;
+         text-color: @color15;
+}
+
+listview {
+columns: 4;
+lines: 3;
+cycle: false;
+dynamic: true;
+layout: vertical;
+}
+
+mainbox {
+children: [ inputbar, listview ];
+spacing: 2%;
+padding: 2% 1% 2% 1%;
+}
+
+element {
+orientation: vertical;
+padding: 2% 0% 2% 0%;
+}
+
+element-icon {
+size: 48px;
+      horizontal-align: 0.5;
+}
+
+element-text {
+expand: true;
+        horizontal-align: 0.5;
+        vertical-align: 0.5;
+margin: 0.5% 0.5% -0.5% 0.5%;
+        text-color: @color15;
+}
+
+element-text, element-icon {
+  background-color: inherit;
+  text-color: inherit;
+}
+
+element selected {
+  background-color: @color4;
+  border-radius: 6px;
+  text-color: @color0;
+}

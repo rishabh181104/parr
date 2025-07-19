@@ -1,0 +1,676 @@
+#!/usr/bin/env bash
+
+# User-Space Arch Linux Hardening Script
+# Description: Additional user-space security and privacy hardening
+# Version: 1.1
+# Usage: ./user-hardening (run as regular user)
+
+set -euo pipefail
+
+# Colors for output
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+BLUE='\033[0;34m'
+NC='\033[0m'
+
+# Log file
+LOG_FILE="$HOME/.arch-user-hardening.log"
+
+print_banner() {
+  echo -e "${BLUE}"
+  echo "========================================"
+  echo "   User-Space Hardening Script         "
+  echo "========================================"
+  echo -e "${NC}"
+}
+
+log_action() {
+  echo -e "${GREEN}[$(date '+%Y-%m-%d %H:%M:%S')] $1${NC}" | tee -a "$LOG_FILE"
+}
+
+log_warning() {
+  echo -e "${YELLOW}[WARNING] $1${NC}" | tee -a "$LOG_FILE"
+}
+
+log_error() {
+  echo -e "${RED}[ERROR] $1${NC}" | tee -a "$LOG_FILE"
+}
+
+# Check if running as regular user (not root)
+if [[ $EUID -eq 0 ]]; then
+  echo -e "${RED}This script should NOT be run as root. Run as your regular user.${NC}"
+  exit 1
+fi
+
+# Clean up previous backups
+cleanup_backups() {
+  log_action "Cleaning up previous backups..."
+
+  # Find and remove backup files
+  find "$HOME" -name "*.backup.*" -type f 2>/dev/null | while read -r backup_file; do
+    log_action "Removing old backup: $backup_file"
+    rm -f "$backup_file" 2>/dev/null
+  done
+
+  log_action "Backup cleanup completed"
+}
+
+# Configure Git security
+setup_git_security() {
+  log_action "Configuring Git security settings..."
+
+  # Check if git is installed
+  if ! command -v git >/dev/null 2>&1; then
+    log_warning "Git not installed, skipping Git configuration"
+    return
+  fi
+
+  # Configure Git to use SSH for GitHub
+  git config --global url."git@github.com:".insteadOf "https://github.com/"
+
+  # Enable GPG signing (if GPG key exists)
+  if command -v gpg >/dev/null 2>&1 && gpg --list-secret-keys --keyid-format LONG 2>/dev/null | grep -q "sec"; then
+    GPG_KEY=$(gpg --list-secret-keys --keyid-format LONG 2>/dev/null | grep "sec" | head -1 | awk '{print $2}' | cut -d'/' -f2)
+    if [[ -n "$GPG_KEY" ]]; then
+      git config --global user.signingkey "$GPG_KEY"
+      git config --global commit.gpgsign true
+      log_action "Git GPG signing enabled with key: $GPG_KEY"
+    fi
+  else
+    log_warning "No GPG key found. Consider creating one for commit signing."
+  fi
+
+  # Security-focused Git configurations
+  git config --global init.defaultBranch main
+  git config --global pull.rebase true
+  git config --global push.default simple
+  git config --global core.autocrlf input
+  git config --global core.filemode true
+}
+
+# Browser hardening (Firefox)
+harden_firefox() {
+  log_action "Setting up Firefox hardening..."
+
+  FIREFOX_PROFILE_DIR="$HOME/.mozilla/firefox"
+
+  if [[ -d "$FIREFOX_PROFILE_DIR" ]]; then
+    # Find the default profile directory
+    PROFILE=$(find "$FIREFOX_PROFILE_DIR" -maxdepth 1 -name "*.default*" -type d | head -1)
+
+    if [[ -n "$PROFILE" ]]; then
+      # Create user.js for privacy hardening
+      cat >"$PROFILE/user.js" <<'EOF'
+// Firefox Privacy and Security Hardening
+// Based on Arkenfox user.js
+
+/* 0101: disable default browser check */
+user_pref("browser.shell.checkDefaultBrowser", false);
+
+/* 0102: set startup page */
+user_pref("browser.startup.page", 0);
+
+/* 0103: set HOME+NEWWINDOW page */
+user_pref("browser.startup.homepage", "about:blank");
+
+/* 0104: set NEWTAB page */
+user_pref("browser.newtabpage.enabled", false);
+
+/* 0201: disable telemetry */
+user_pref("toolkit.telemetry.unified", false);
+user_pref("toolkit.telemetry.enabled", false);
+user_pref("toolkit.telemetry.server", "data:,");
+user_pref("toolkit.telemetry.archive.enabled", false);
+user_pref("toolkit.telemetry.newProfilePing.enabled", false);
+user_pref("toolkit.telemetry.shutdownPingSender.enabled", false);
+user_pref("toolkit.telemetry.updatePing.enabled", false);
+user_pref("toolkit.telemetry.bhrPing.enabled", false);
+user_pref("toolkit.telemetry.firstShutdownPing.enabled", false);
+
+/* 0202: disable health reports */
+user_pref("datareporting.healthreport.uploadEnabled", false);
+
+/* 0203: disable studies */
+user_pref("app.shield.optoutstudies.enabled", false);
+
+/* 0204: disable personalized extension recommendations */
+user_pref("browser.discovery.enabled", false);
+
+/* 0301: disable Pocket */
+user_pref("extensions.pocket.enabled", false);
+
+/* 0320: disable recommended extensions */
+user_pref("browser.newtabpage.activity-stream.asrouter.userprefs.cfr.addons", false);
+user_pref("browser.newtabpage.activity-stream.asrouter.userprefs.cfr.features", false);
+
+/* 0801: disable location bar making speculative connections */
+user_pref("browser.urlbar.speculativeConnect.enabled", false);
+
+/* 0803: disable live search suggestions */
+user_pref("browser.search.suggest.enabled", false);
+user_pref("browser.urlbar.suggest.searches", false);
+
+/* 1001: disable disk cache */
+user_pref("browser.cache.disk.enable", false);
+
+/* 1201: enable HTTPS-Only mode in all windows */
+user_pref("dom.security.https_only_mode", true);
+
+/* 1601: control when to send a cross-origin referer */
+user_pref("network.http.referer.XOriginPolicy", 2);
+
+/* 1602: control the amount of cross-origin information to send */
+user_pref("network.http.referer.XOriginTrimmingPolicy", 2);
+
+/* 2001: disable WebRTC */
+user_pref("media.peerconnection.enabled", false);
+
+/* 2301: disable service workers */
+user_pref("dom.serviceWorkers.enabled", false);
+
+/* 2401: disable notifications */
+user_pref("dom.webnotifications.enabled", false);
+
+/* 2501: disable battery API */
+user_pref("dom.battery.enabled", false);
+
+/* 2601: disable gamepad API */
+user_pref("dom.gamepad.enabled", false);
+
+/* 2701: disable clipboard API */
+user_pref("dom.event.clipboardevents.enabled", false);
+
+/* 4001: enable RFP (resist fingerprinting) */
+user_pref("privacy.resistFingerprinting", true);
+
+/* 4501: enable privacy.firstparty.isolate */
+user_pref("privacy.firstparty.isolate", true);
+
+/* 5001: disable windows.name persistence */
+user_pref("privacy.window.name.update.enabled", false);
+
+/* 5003: disable saving passwords */
+user_pref("signon.rememberSignons", false);
+
+/* 5004: disable auto-filling username & password form fields */
+user_pref("signon.autofillForms", false);
+
+/* 5005: disable formless login capture for Password Manager */
+user_pref("signon.formlessCapture.enabled", false);
+
+/* 5006: limit (or disable) HTTP authentication credentials dialogs */
+user_pref("network.auth.subresource-http-auth-allow", 1);
+
+/* 5010: disable location bar contextual suggestions */
+user_pref("browser.urlbar.suggest.quicksuggest.nonsponsored", false);
+user_pref("browser.urlbar.suggest.quicksuggest.sponsored", false);
+
+/* 5017: disable Form Autofill */
+user_pref("extensions.formautofill.addresses.enabled", false);
+user_pref("extensions.formautofill.available", "off");
+user_pref("extensions.formautofill.creditCards.available", false);
+user_pref("extensions.formautofill.creditCards.enabled", false);
+user_pref("extensions.formautofill.heuristics.enabled", false);
+
+/* 6001: enforce no offline cache storage */
+user_pref("browser.cache.offline.enable", false);
+
+/* 6002: enforce no speculative loading */
+user_pref("network.dns.disablePrefetch", true);
+user_pref("network.dns.disablePrefetchFromHTTPS", true);
+user_pref("network.predictor.enabled", false);
+user_pref("network.predictor.enable-prefetch", false);
+user_pref("network.http.speculative-parallel-limit", 0);
+user_pref("browser.places.speculativeConnect.enabled", false);
+
+/* 6003: enforce no Link Prefetching */
+user_pref("network.prefetch-next", false);
+EOF
+      log_action "Firefox security configuration applied"
+    else
+      log_warning "No Firefox profile found. Firefox may not be installed or configured."
+    fi
+  else
+    log_warning "Firefox profile directory not found. Firefox may not be installed."
+  fi
+}
+
+# Setup GPG configuration
+setup_gpg() {
+  log_action "Setting up GPG configuration..."
+
+  # Check if GPG is installed
+  if ! command -v gpg >/dev/null 2>&1; then
+    log_warning "GPG not installed, skipping GPG configuration"
+    return
+  fi
+
+  # Create GPG directory if it doesn't exist
+  mkdir -p "$HOME/.gnupg"
+  chmod 700 "$HOME/.gnupg"
+
+  # Create GPG configuration file
+  cat >"$HOME/.gnupg/gpg.conf" <<'EOF'
+# GPG Security Settings
+
+# Default key preferences
+default-preference-list SHA512 SHA384 SHA256 SHA224 AES256 AES192 AES CAST5 ZLIB BZIP2 ZIP Uncompressed
+
+# Strong digest algorithms
+personal-digest-preferences SHA512 SHA384 SHA256 SHA224
+
+# Strong cipher algorithms
+personal-cipher-preferences AES256 AES192 AES CAST5
+
+# Strong compression algorithms
+personal-compress-preferences ZLIB BZIP2 ZIP Uncompressed
+
+# Cipher preferences for new keys
+s2k-cipher-algo AES256
+s2k-digest-algo SHA512
+s2k-mode 3
+s2k-count 65011712
+
+# Display preferences
+keyid-format 0xlong
+with-fingerprint
+list-options show-uid-validity
+verify-options show-uid-validity
+
+# Behavior settings
+no-emit-version
+no-comments
+export-options export-minimal
+keyserver-options no-honor-keyserver-url
+
+# Security settings
+use-agent
+lock-once
+EOF
+
+  # Create gpg-agent.conf for better security
+  cat >"$HOME/.gnupg/gpg-agent.conf" <<'EOF'
+# GPG Agent configuration
+
+# PIN entry program
+pinentry-program /usr/bin/pinentry-gtk-2
+
+# Cache settings for better security
+default-cache-ttl 600
+max-cache-ttl 7200
+EOF
+
+  log_action "GPG configuration completed"
+}
+
+# Setup SSH client configuration
+setup_ssh_client() {
+  log_action "Setting up SSH client configuration..."
+
+  # Create .ssh directory if it doesn't exist
+  mkdir -p "$HOME/.ssh"
+  chmod 700 "$HOME/.ssh"
+
+  # Create or update SSH config
+  if [[ -f "$HOME/.ssh/config" ]]; then
+    # Backup existing config
+    cp "$HOME/.ssh/config" "$HOME/.ssh/config.backup.$(date +%Y%m%d-%H%M%S)"
+  fi
+
+  cat >"$HOME/.ssh/config" <<'EOF'
+# Secure SSH Client Configuration
+
+# Global defaults
+Host *
+    # Security settings
+    Protocol 2
+    HashKnownHosts yes
+    StrictHostKeyChecking ask
+    VerifyHostKeyDNS yes
+
+    # Prevent client timeouts
+    ServerAliveInterval 60
+    ServerAliveCountMax 3
+
+    # Better crypto
+    KexAlgorithms curve25519-sha256@libssh.org,diffie-hellman-group-exchange-sha256
+    HostKeyAlgorithms ssh-ed25519-cert-v01@openssh.com,ssh-rsa-cert-v01@openssh.com,ssh-ed25519,ssh-rsa
+    Ciphers chacha20-poly1305@openssh.com,aes256-gcm@openssh.com,aes128-gcm@openssh.com,aes256-ctr,aes192-ctr,aes128-ctr
+    MACs hmac-sha2-512-etm@openssh.com,hmac-sha2-256-etm@openssh.com,umac-128-etm@openssh.com
+
+    # Authentication
+    PubkeyAuthentication yes
+    PasswordAuthentication no
+
+    # Forward settings
+    ForwardAgent no
+    ForwardX11 no
+    ForwardX11Trusted no
+
+    # Other options
+    UseRoaming no
+    UpdateHostKeys yes
+    ControlMaster auto
+    ControlPath ~/.ssh/control-%C
+    ControlPersist 10m
+    Compression yes
+EOF
+
+  chmod 600 "$HOME/.ssh/config"
+  log_action "SSH client configuration completed"
+}
+
+# Install user-space security tools
+install_user_tools() {
+  log_action "Setting up user-space security tools..."
+
+  # Create bin directory if it doesn't exist
+  mkdir -p "$HOME/.local/bin"
+
+  # Create security-check script for periodic scanning
+  cat >"$HOME/.local/bin/security-check" <<'EOF'
+#!/usr/bin/env bash
+# User security check script
+
+echo "==========================================="
+echo "   User Security Check                    "
+echo "==========================================="
+echo "Running security scan at $(date)"
+echo
+
+# Check SSH keys permissions
+echo "Checking SSH keys permissions..."
+find ~/.ssh -type f -name "id_*" -not -name "*.pub" | while read -r key; do
+  perm=$(stat -c "%a" "$key")
+  if [[ "$perm" != "600" ]]; then
+    echo "⚠️ Warning: SSH key $key has incorrect permissions: $perm (should be 600)"
+    echo "  Fix with: chmod 600 $key"
+  fi
+done
+
+# Check for .bash_history/.zsh_history permissions
+echo "Checking shell history permissions..."
+for hist_file in ~/.bash_history ~/.zsh_history; do
+  if [[ -f "$hist_file" ]]; then
+    perm=$(stat -c "%a" "$hist_file")
+    if [[ "$perm" != "600" ]]; then
+      echo "⚠️ Warning: $hist_file has incorrect permissions: $perm (should be 600)"
+      echo "  Fix with: chmod 600 $hist_file"
+    fi
+  fi
+done
+
+# Check for weak passwords in keyring (if available)
+if command -v seahorse >/dev/null 2>&1; then
+  echo "Checking keyring passwords..."
+  # This is a reminder - we can't actually check keyring password strength
+  echo "⚠️ Remember to check your keyring passwords for strength"
+fi
+
+# Check Firefox privacy settings
+if [[ -d ~/.mozilla/firefox ]]; then
+  echo "Checking Firefox privacy settings..."
+  PROFILE=$(find ~/.mozilla/firefox -maxdepth 1 -name "*.default*" -type d | head -1)
+  if [[ -n "$PROFILE" ]] && [[ -f "$PROFILE/user.js" ]]; then
+    echo "✓ Firefox privacy hardening detected"
+  else
+    echo "⚠️ Warning: Firefox privacy hardening not detected"
+    echo "  Run the user-hardening script to apply Firefox privacy settings"
+  fi
+fi
+
+# Check for credential files in home directory
+echo "Checking for exposed credentials..."
+# This is a basic check for common credential file patterns
+grep -r -l -E "password|credential|secret|token|api.?key" \
+  --include="*.txt" --include="*.conf" --include="*.ini" \
+  --include="*.json" --include="*.yml" --include="*.yaml" \
+  "$HOME" 2>/dev/null | while read -r cred_file; do
+  echo "⚠️ Potential credentials found in: $cred_file"
+  echo "  Review this file and secure it appropriately"
+done
+
+echo
+echo "Security check completed at $(date)"
+echo "==========================================="
+EOF
+
+  chmod +x "$HOME/.local/bin/security-check"
+
+  log_action "User security tools installed"
+}
+
+# Setup secure shell configuration
+setup_secure_shell() {
+  log_action "Setting up secure shell configuration..."
+
+  # Determine which shell is in use
+  if [[ -n "$BASH_VERSION" ]]; then
+    SHELL_RC="$HOME/.bashrc"
+    SHELL_PROFILE="$HOME/.bash_profile"
+  elif [[ -n "$ZSH_VERSION" ]]; then
+    SHELL_RC="$HOME/.zshrc"
+    SHELL_PROFILE="$HOME/.zprofile"
+  else
+    log_warning "Unknown shell, defaulting to bash configuration"
+    SHELL_RC="$HOME/.bashrc"
+    SHELL_PROFILE="$HOME/.bash_profile"
+  fi
+
+  # Create or update shell profile
+  if [[ -f "$SHELL_PROFILE" ]]; then
+    cp "$SHELL_PROFILE" "$SHELL_PROFILE.backup.$(date +%Y%m%d-%H%M%S)"
+  fi
+
+  # Add security configurations to shell
+  cat >>"$SHELL_RC" <<'EOF'
+
+# Security hardening settings
+export HISTCONTROL=ignoreboth:erasedups
+export HISTIGNORE="&:ls:cd:exit:clear:history"
+export HISTFILESIZE=1000
+export HISTSIZE=1000
+export HISTTIMEFORMAT="%F %T "
+shopt -s histappend 2>/dev/null || setopt appendhistory 2>/dev/null
+
+# Path settings
+export PATH="$HOME/.local/bin:$PATH"
+
+# GPG settings
+export GPG_TTY=$(tty)
+
+# Use more secure umask
+umask 027
+
+# Aliases for secure file operations
+alias rm='rm -i'
+alias cp='cp -i'
+alias mv='mv -i'
+alias ls='ls --color=auto'
+alias grep='grep --color=auto'
+
+# Security check alias
+alias security-check='$HOME/.local/bin/security-check'
+EOF
+
+  log_action "Shell security configuration completed"
+}
+
+# Setup Firejail profiles
+setup_firejail_profiles() {
+  log_action "Setting up application sandboxing with Firejail..."
+
+  # Check if Firejail is installed
+  if ! command -v firejail >/dev/null 2>&1; then
+    log_warning "Firejail not installed, skipping Firejail configuration"
+    return
+  fi
+
+  # Create Firejail directory if it doesn't exist
+  mkdir -p "$HOME/.config/firejail"
+
+  # Create custom Firejail profiles
+  cat >"$HOME/.config/firejail/firefox.local" <<'EOF'
+# Firefox Firejail profile (additional hardening)
+whitelist ${HOME}/.mozilla
+whitelist ${HOME}/Downloads
+whitelist ${HOME}/Documents
+noblacklist ${HOME}/.cache/mozilla
+EOF
+
+  cat >"$HOME/.config/firejail/chromium.local" <<'EOF'
+# Chromium Firejail profile (additional hardening)
+whitelist ${HOME}/.config/chromium
+whitelist ${HOME}/Downloads
+whitelist ${HOME}/Documents
+noblacklist ${HOME}/.cache/chromium
+EOF
+
+  # Create shell aliases for Firejail
+  cat >"$HOME/.local/bin/private-browser" <<'EOF'
+#!/bin/bash
+# Run Firefox in private mode with Firejail
+firejail --private firefox --private-window "$@"
+EOF
+  chmod +x "$HOME/.local/bin/private-browser"
+
+  log_action "Firejail configuration completed"
+}
+
+# Setup environment privacy settings
+setup_privacy_env() {
+  log_action "Setting up environment privacy..."
+
+  # Create .profile or add to existing
+  PROFILE_FILE="$HOME/.profile"
+
+  if [[ -f "$PROFILE_FILE" ]]; then
+    cp "$PROFILE_FILE" "$PROFILE_FILE.backup.$(date +%Y%m%d-%H%M%S)"
+  fi
+
+  cat >>"$PROFILE_FILE" <<'EOF'
+# Privacy environment variables
+
+# Disable telemetry for various programs
+export DOTNET_CLI_TELEMETRY_OPTOUT=1
+export POWERSHELL_TELEMETRY_OPTOUT=1
+export AZURE_CORE_COLLECT_TELEMETRY=0
+export HOMEBREW_NO_ANALYTICS=1
+export DO_NOT_TRACK=1
+export GATSBY_TELEMETRY_DISABLED=1
+export NEXT_TELEMETRY_DISABLED=1
+export NUXT_TELEMETRY_DISABLED=1
+export TELEMETRY_DISABLED=1
+export ADBLOCK=1
+export DISABLE_TELEMETRY=1
+
+# XDG paths for better organization and privacy
+export XDG_CONFIG_HOME="$HOME/.config"
+export XDG_CACHE_HOME="$HOME/.cache"
+export XDG_DATA_HOME="$HOME/.local/share"
+
+# Make less secure by not saving history
+export LESSHISTFILE=-
+EOF
+
+  log_action "Environment privacy settings configured"
+}
+
+# Setup user monitoring tools
+create_user_monitoring() {
+  log_action "Setting up user monitoring tools..."
+
+  # Create a simple monitoring script
+  cat >"$HOME/.local/bin/monitor-system" <<'EOF'
+#!/bin/bash
+# Simple system monitoring script
+
+echo "==========================================="
+echo "   System Monitoring                      "
+echo "==========================================="
+echo "Running check at $(date)"
+echo
+
+# Check disk space
+echo "Disk space usage:"
+df -h | grep -v "tmpfs\|udev"
+echo
+
+# Check for large files in home directory
+echo "Largest files in home directory (top 10):"
+find "$HOME" -type f -size +100M 2>/dev/null | xargs -r du -sh | sort -hr | head -10
+echo
+
+# Check current network connections
+echo "Current network connections:"
+ss -tulanp | grep -v "127.0.0.1" | grep -v "::1" | head -20
+echo
+
+# Check for listening ports
+echo "Listening ports:"
+ss -tulanp | grep LISTEN | grep -v "127.0.0.1" | grep -v "::1"
+echo
+
+# Check running processes
+echo "Top 10 CPU-consuming processes:"
+ps aux --sort=-%cpu | head -11
+echo
+
+# Check login history
+echo "Recent logins:"
+last | head -10
+echo
+
+echo "Monitoring completed at $(date)"
+echo "==========================================="
+EOF
+
+  chmod +x "$HOME/.local/bin/monitor-system"
+
+  log_action "Monitoring tools setup completed"
+}
+
+# Main function
+main() {
+  print_banner
+
+  log_action "Starting user-space hardening process..."
+
+  # Clean up previous backups first
+  cleanup_backups
+
+  # Core user hardening
+  setup_secure_shell
+  setup_ssh_client
+  setup_gpg
+  setup_git_security
+  setup_privacy_env
+
+  # Browser hardening
+  harden_firefox
+
+  # Security tools and monitoring
+  install_user_tools
+  setup_firejail_profiles
+  create_user_monitoring
+
+  echo -e "${GREEN}"
+  echo "========================================"
+  echo "   User-Space Hardening Complete!      "
+  echo "========================================"
+  echo -e "${NC}"
+  echo "Additional steps to consider:"
+  echo "1. Generate SSH keys: ssh-keygen -t ed25519 -C 'your_email@example.com'"
+  echo "2. Generate GPG key: gpg --full-generate-key"
+  echo "3. Install browser extensions: uBlock Origin, Privacy Badger"
+  echo "4. Set up 2FA for important accounts"
+  echo "5. Run security check: security-check"
+  echo "6. Consider using Tor Browser for sensitive browsing"
+  echo ""
+  echo "Log file: $LOG_FILE"
+  echo "Restart your shell to apply all changes"
+}
+
+# Run main function
+main "$@"
