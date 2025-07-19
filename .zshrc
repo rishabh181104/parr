@@ -2,12 +2,10 @@ if [[ -r "${XDG_CACHE_HOME:-$HOME/.cache}/p10k-instant-prompt-${(%):-%n}.zsh" ]]
   source "${XDG_CACHE_HOME:-$HOME/.cache}/p10k-instant-prompt-${(%):-%n}.zsh"
 fi
 
-# Auto-start Hyprland or startx on TTY1
-if [[ -z $DISPLAY ]] && [[ $(tty) =~ /dev/tty1 ]]; then
-  # Replace 'hyprland' with 'startx' if you want to use X11 instead
-  exec hyprland
-  # Alternatively, use:
-  # exec startx
+# Auto-start Sway on TTY1
+if [[ -z $DISPLAY ]] && [[ -z $WAYLAND_DISPLAY ]] && [[ $(tty) =~ /dev/tty1 ]]; then
+  # Start Sway instead of Hyprland for Kali Linux
+  exec sway
 fi
 
 if [[ -o interactive ]]; then
@@ -32,6 +30,7 @@ zinit light Aloxaf/fzf-tab
 
 zinit snippet OMZP::git
 zinit snippet OMZP::sudo
+zinit snippet OMZP::debian
 zinit snippet OMZP::aws
 zinit snippet OMZP::kubectl
 zinit snippet OMZP::kubectx
@@ -65,16 +64,12 @@ zstyle ':completion:*' menu no
 zstyle ':fzf-tab:complete:cd:*' fzf-preview 'ls --color $realpath'
 zstyle ':fzf-tab:complete:__zoxide_z:*' fzf-preview 'ls --color $realpath'
 
-# eval "$(zoxide init --cmd cd zsh)"
-
 # # Ensure UTF-8 support
 export LANG=en_IN.UTF-8
 export LC_ALL=en_IN.UTF-8
 
 # Default apps, terminal or programs
-# export EDITOR="nvim"
-# export TERM="kitty"
-# export BROWSER="zen-browser"
+export EDITOR="nvim"
 
 # Fix $TERM for tmux and truecolor support
 if [[ -n "$TMUX" ]]; then
@@ -101,6 +96,7 @@ alias rmd='/bin/rm  --recursive --force --verbose '
 
 # Navigation shortcuts
 alias home='cd ~'
+alias cd..='cd ..'
 alias ..='cd ..'
 alias ...='cd ../..'
 alias ....='cd ../../..'
@@ -111,12 +107,14 @@ alias bd='cd "$OLDPWD"'
 #           EDITOR ALIASES
 # ==========================================
 # Neovim and editor shortcuts
+alias vim='nvim'
 alias n='nvim'
 alias sn='sudo nvim'
 alias nv='nvim'
 alias nvi='nvim'
-alias v='vim'
-alias sv='sudo vim'
+alias v='nvim'
+alias vi='nvim'
+alias svi='sudo vi'
 alias vis='nvim "+set si"'
 
 # ==========================================
@@ -150,14 +148,15 @@ alias restart-dm='sudo systemctl restart display-manager'
 # ==========================================
 #           PACKAGE MANAGEMENT
 # ==========================================
-# Arch Linux package management shortcuts
-alias i='sudo apt install -y --no-upgrade'
-alias u='sudo apt update && sudo apt upgrade -y'
-alias r='sudo apt purge -y'
-alias remove-orphaned='sudo pacman -Rns $(pacman -Qtdq) && paru -Rns $(pacman -Qtdq)'
-alias s='paru -Ss'
-alias aggressively-clear-cache='sudo pacman -Scc && paru -Scc'
-alias clear-cache='sudo pacman -Sc && paru -Sc'
+# Kali Linux package management shortcuts
+alias i='sudo apt install'
+alias u='sudo apt update && sudo apt upgrade'
+alias r='sudo apt remove'
+alias remove-orphaned='sudo apt autoremove'
+alias s='apt search'
+alias aggressively-clear-cache='sudo apt autoclean && sudo apt clean'
+alias clear-cache='sudo apt clean'
+alias show='apt show'
 
 # ==========================================
 #           FILE OPERATIONS
@@ -228,7 +227,7 @@ alias tty_kill_all="sudo pkill -t $(who | awk '$2 != "tty1" {print $2}' | sort -
 alias convert='ffmpeg -i $argv[1] -filter_complex "[0:v] fps=10,scale=320:-1,split [a][b];[a] palettegen [p];[b][p] paletteuse" $argv[2]'
 
 # System monitoring
-alias fetch='nitch'
+alias fetch='fastfetch'
 alias macchina='$HOME/.cargo/bin/./macchina'
 
 # ==========================================
@@ -253,9 +252,15 @@ alias hlp='less ~/.bashrc_help'
 alias da='date "+%Y-%m-%d %A %T %Z"'
 
 # Entertainment
-alias anime='~/stecore/scripts/./ani-cli'
+alias anime='~/.local/bin/ani-cli'
 
-alias mirror-rating='rate-mirrors --entry-country=IN --protocol=https arch | sudo tee /etc/pacman.d/mirrorlist'
+# Kali Linux specific aliases
+alias kali-update='sudo apt update && sudo apt full-upgrade -y'
+alias kali-install='sudo apt install'
+alias kali-search='apt search'
+alias kali-remove='sudo apt remove --purge'
+alias kali-clean='sudo apt autoremove && sudo apt autoclean'
+alias kali-list='apt list --installed'
 
 # Fix Home/End keys in terminal
 bindkey "^[[H" beginning-of-line
